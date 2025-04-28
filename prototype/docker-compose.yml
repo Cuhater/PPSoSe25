@@ -1,0 +1,118 @@
+version: "3.8"
+
+services:
+  traefik:
+    image: "traefik:v2.9"
+    platform: linux/amd64
+    container_name: "traefik"
+    restart: always
+    command:
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.http.tls=true"
+      - "--providers.file.filename=/config/dynamic.yml"
+    ports:
+      - "8082:8080"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./certs:/certs"
+      - "./config:/config"
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.local`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.tls=true"
+
+  gtm-preview:
+    image: gcr.io/cloud-tagging-10302018/gtm-cloud-image:stable
+    platform: linux/amd64
+    container_name: gtm-preview
+    restart: always
+    ports:
+      - "8081:8081"
+    networks:
+      - traefik_network
+    environment:
+      - CONTAINER_CONFIG=${CONTAINER_CONFIG}
+      - RUN_AS_PREVIEW_SERVER=true
+      - PORT=8081
+      - HOST=0.0.0.0
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gtm-preview.rule=Host(`gtm-preview.local`)"
+      - "traefik.http.routers.gtm-preview.entrypoints=websecure"
+      - "traefik.http.services.gtm-preview.loadbalancer.server.port=8081"
+      - "traefik.http.routers.gtm-preview.tls=true"
+      - "traefik.http.routers.gtm-preview.service=gtm-preview"
+
+  sst-server:
+    image: gcr.io/cloud-tagging-10302018/gtm-cloud-image:stable
+    platform: linux/amd64
+    container_name: sst-server
+    ports:
+      - "8079:8079"
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sst-server.rule=Host(`gtm-server.local`)"
+      - "traefik.http.routers.sst-server.entrypoints=websecure"
+      - "traefik.http.services.sst-server.loadbalancer.server.port=8079"
+      - "traefik.http.routers.sst-server.tls=true"
+    environment:
+      - CONTAINER_CONFIG=${CONTAINER_CONFIG}
+      - PREVIEW_SERVER_URL=https://gtm-preview.local
+      - PORT=8079
+      - HOST=0.0.0.0
+
+  wordpress:
+    image: wordpress:latest
+    container_name: wordpress
+    platform: linux/amd64
+    restart: always
+    depends_on:
+      - mysql
+    networks:
+      - traefik_network
+    environment:
+      - WORDPRESS_DB_HOST=mysql
+      - WORDPRESS_DB_USER=wpuser
+      - WORDPRESS_DB_PASSWORD=wppass
+      - WORDPRESS_DB_NAME=wordpress
+    volumes:
+      - "/Users/christiankrenn/Local Sites/praxisprojekt/app/public:/var/www/html"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wordpress.rule=Host(`praxisprojekt.local`)"
+      - "traefik.http.routers.wordpress.entrypoints=websecure"
+      - "traefik.http.routers.wordpress.tls=true"
+
+  mysql:
+    image: mysql:5.7
+    container_name: mysql
+    platform: linux/amd64
+    restart: always
+    networks:
+      - traefik_network
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass
+      - MYSQL_DATABASE=wordpress
+      - MYSQL_USER=wpuser
+      - MYSQL_PASSWORD=wppass
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+networks:
+  traefik_network:
+    driver: bridge
+
+volumes:
+  mysql_data:

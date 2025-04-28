@@ -1,0 +1,8 @@
+tls:
+  certificates:
+    - certFile: "/certs/praxisprojekt.local.crt"
+      keyFile: "/certs/praxisprojekt.local.key"
+    - certFile: "/certs/gtm-preview.local.crt"
+      keyFile: "/certs/gtm-preview.local.key"
+    - certFile: "/certs/gtm-server.local.crt"
+      keyFile: "/certs/gtm-server.local.key"
